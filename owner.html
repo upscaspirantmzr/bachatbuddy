@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Owner Dashboard - Truck Tracking</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script type="module" src="./firebaseConfig.js"></script>
+</head>
+<body class="bg-gray-100 flex">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-blue-700 text-white min-h-screen p-4 space-y-6">
+    <h1 class="text-2xl font-bold">Owner Dashboard</h1>
+    <nav class="flex flex-col space-y-3">
+      <a href="#" class="hover:bg-blue-600 p-2 rounded">Reports</a>
+      <a href="#" class="hover:bg-blue-600 p-2 rounded">Analytics</a>
+      <button id="logoutBtn" class="mt-6 bg-red-500 hover:bg-red-600 py-2 rounded">Logout</button>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 p-6">
+    <h2 class="text-xl font-semibold mb-4">Analytics Overview</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <canvas id="dailyChart" class="bg-white p-4 rounded-lg shadow"></canvas>
+      <canvas id="monthlyChart" class="bg-white p-4 rounded-lg shadow"></canvas>
+    </div>
+
+    <div class="bg-white p-4 rounded-lg shadow mb-6">
+      <h3 class="text-lg font-semibold mb-2">Contractor-wise Truck Count</h3>
+      <canvas id="contractorChart"></canvas>
+    </div>
+
+    <div class="flex gap-4">
+      <button id="exportPDF" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">Export PDF</button>
+      <button id="exportCSV" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">Export CSV</button>
+    </div>
+  </main>
+
+  <script type="module">
+    import { auth, db } from './firebaseConfig.js';
+    import { signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.24.0/firebase-auth.js';
+    import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.24.0/firebase-firestore.js';
+
+    const logoutBtn = document.getElementById('logoutBtn');
+    logoutBtn.addEventListener('click', async () => {
+      await signOut(auth);
+      window.location.href = 'gatekeeper.html';
+    });
+
+    const dailyCtx = document.getElementById('dailyChart');
+    const monthlyCtx = document.getElementById('monthlyChart');
+    const contractorCtx = document.getElementById('contractorChart');
+
+    async function loadData() {
+      const snapshot = await getDocs(collection(db, 'truckLogs'));
+      const logs = snapshot.docs.map(doc => doc.data());
+
+      // Daily count
+      const today = new Date().toISOString().slice(0, 10);
+      const dailyCount = logs.filter(l => l.timestamp.slice(0,10) === today).length;
+
+      new Chart(dailyCtx, {
+        type: 'bar',
+        data: { labels: [today], datasets: [{ label: 'Trucks Today', data: [dailyCount], backgroundColor: '#3b82f6' }] },
+      });
+
+      // Monthly count (group by month)
+      const monthMap = {};
+      logs.forEach(l => {
+        const m = l.timestamp.slice(0,7);
+        monthMap[m] = (monthMap[m] || 0) + 1;
+      });
+      new Chart(monthlyCtx, {
+        type: 'line',
+        data: { labels: Object.keys(monthMap), datasets: [{ label: 'Trucks per Month', data: Object.values(monthMap), borderColor: '#ef4444' }] },
+      });
+
+      // Contractor-wise count
+      const contractorMap = {};
+      logs.forEach(l => {
+        contractorMap[l.contractor] = (contractorMap[l.contractor] || 0) + 1;
+      });
+      new Chart(contractorCtx, {
+        type: 'pie',
+        data: { labels: Object.keys(contractorMap), datasets: [{ data: Object.values(contractorMap), backgroundColor: ['#10b981','#3b82f6','#f59e0b','#ef4444'] }] },
+      });
+
+      // Export PDF
+      document.getElementById('exportPDF').addEventListener('click', () => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.text('Truck Tracking Report', 20, 20);
+        doc.text(`Total Records: ${logs.length}`, 20, 30);
+        doc.save('truck_report.pdf');
+      });
+
+      // Export CSV
+      document.getElementById('exportCSV').addEventListener('click', () => {
+        const csv = ['TruckNo,Contractor,Type,Timestamp'];
+        logs.forEach(l => csv.push(`${l.truckNo},${l.contractor},${l.type},${l.timestamp}`));
+        const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'truck_report.csv';
+        a.click();
+      });
+    }
+
+    onAuthStateChanged(auth, user => {
+      if (!user) window.location.href = 'gatekeeper.html';
+      else loadData();
+    });
+  </script>
+</body>
+</html>
