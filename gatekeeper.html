@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gatekeeper App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-6">
+    <h1 class="text-2xl font-bold text-center text-blue-600 mb-6">Gatekeeper Login</h1>
+    <div id="loginSection">
+      <input id="email" type="email" placeholder="Email" class="w-full mb-3 p-3 rounded-lg border" />
+      <input id="password" type="password" placeholder="Password" class="w-full mb-3 p-3 rounded-lg border" />
+      <button id="loginBtn" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Login</button>
+      <p id="loginError" class="text-red-500 text-sm mt-2 hidden">Invalid login. Try again.</p>
+    </div>
+
+    <div id="formSection" class="hidden">
+      <h2 class="text-xl font-semibold text-center mb-4">Truck Entry/Exit</h2>
+      <input id="truckNo" type="text" placeholder="Truck Number" class="w-full mb-3 p-3 rounded-lg border" />
+      <input id="contractor" type="text" placeholder="Contractor" class="w-full mb-3 p-3 rounded-lg border" />
+      <div class="flex justify-between mb-3">
+        <button id="entryBtn" class="flex-1 bg-green-500 text-white py-2 rounded-lg mr-2 hover:bg-green-600">Entry</button>
+        <button id="exitBtn" class="flex-1 bg-red-500 text-white py-2 rounded-lg ml-2 hover:bg-red-600">Exit</button>
+      </div>
+      <button id="logoutBtn" class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600">Logout</button>
+      <p id="statusMsg" class="text-center text-green-600 mt-3 hidden">Saved successfully!</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db } from './firebaseConfig.js';
+    import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.24.0/firebase-auth.js';
+    import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.24.0/firebase-firestore.js';
+
+    const loginSection = document.getElementById('loginSection');
+    const formSection = document.getElementById('formSection');
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const loginError = document.getElementById('loginError');
+    const statusMsg = document.getElementById('statusMsg');
+
+    let currentUser = null;
+
+    loginBtn.addEventListener('click', async () => {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (error) {
+        loginError.classList.remove('hidden');
+      }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await signOut(auth);
+    });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        currentUser = user;
+        loginSection.classList.add('hidden');
+        formSection.classList.remove('hidden');
+      } else {
+        currentUser = null;
+        loginSection.classList.remove('hidden');
+        formSection.classList.add('hidden');
+      }
+    });
+
+    async function saveTruckLog(type) {
+      const truckNo = document.getElementById('truckNo').value;
+      const contractor = document.getElementById('contractor').value;
+      if (!truckNo || !contractor) return;
+
+      const log = {
+        truckNo,
+        contractor,
+        type,
+        timestamp: serverTimestamp(),
+        gatekeeperID: currentUser.uid
+      };
+
+      await addDoc(collection(db, 'truckLogs'), log);
+      statusMsg.textContent = "Saved successfully!";
+      statusMsg.classList.remove('hidden');
+      setTimeout(() => statusMsg.classList.add('hidden'), 3000);
+
+      generateReceipt(log);
+      document.getElementById('truckNo').value = '';
+      document.getElementById('contractor').value = '';
+    }
+
+    document.getElementById('entryBtn').addEventListener('click', () => saveTruckLog('Entry'));
+    document.getElementById('exitBtn').addEventListener('click', () => saveTruckLog('Exit'));
+
+    function generateReceipt(log) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.text("Company Name", 105, 15, { align: "center" });
+      doc.setFontSize(12);
+      doc.text("Truck Receipt", 105, 25, { align: "center" });
+      doc.line(20, 30, 190, 30);
+
+      doc.setFontSize(12);
+      doc.text(`Receipt No: ${Date.now()}`, 20, 40);
+      doc.text(`Truck No: ${log.truckNo}`, 20, 50);
+      doc.text(`Contractor: ${log.contractor}`, 20, 60);
+      doc.text(`Type: ${log.type}`, 20, 70);
+      doc.setTextColor(log.type === 'Entry' ? 'green' : 'red');
+      doc.text(`${log.type}`, 80, 70);
+      doc.setTextColor('black');
+      doc.text(`Date: ${new Date().toLocaleString()}`, 20, 80);
+
+      doc.save(`receipt_${log.truckNo}_${Date.now()}.pdf`);
+    }
+  </script>
+</body>
+</html>
