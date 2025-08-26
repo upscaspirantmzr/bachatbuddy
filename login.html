@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BachatBuddy - Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+  <script src="firebase-config.js"></script>
+</head>
+<body class="bg-gradient-to-r from-green-400 via-teal-500 to-blue-500 min-h-screen flex items-center justify-center">
+  <div class="bg-white p-8 rounded-xl shadow-lg w-96">
+    <h2 class="text-2xl font-bold text-center mb-6">Welcome Back 👋</h2>
+    <input type="email" id="email" placeholder="Email" class="w-full p-3 border rounded mb-3">
+    <input type="password" id="password" placeholder="Password" class="w-full p-3 border rounded mb-3">
+    <button onclick="login()" class="w-full bg-teal-600 text-white p-3 rounded-lg hover:bg-teal-500">Login</button>
+    <p class="text-center mt-4">New here? <a href="signup.html" class="text-teal-600 font-semibold">Signup</a></p>
+    <p id="error" class="text-red-600 text-center mt-2"></p>
+  </div>
+
+  <script>
+    async function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const error = document.getElementById("error");
+
+      try {
+        const auth = firebase.auth();
+        await auth.signInWithEmailAndPassword(email, password);
+        window.location.href = "dashboard.html";
+      } catch (err) {
+        error.innerText = err.message;
+      }
+    }
+  </script>
+</body>
+</html>
