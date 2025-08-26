@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100 font-sans">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-blue-800 text-white flex flex-col">
+      <div class="p-4 text-2xl font-bold border-b border-blue-700">Admin Panel</div>
+      <nav class="flex-1 p-4 space-y-2">
+        <a href="#" class="flex items-center p-2 hover:bg-blue-700 rounded"><i class="fa fa-home mr-2"></i> Dashboard</a>
+        <a href="#logs" class="flex items-center p-2 hover:bg-blue-700 rounded"><i class="fa fa-truck mr-2"></i> Truck Logs</a>
+        <a href="#reports" class="flex items-center p-2 hover:bg-blue-700 rounded"><i class="fa fa-file-alt mr-2"></i> Reports</a>
+        <a href="#users" class="flex items-center p-2 hover:bg-blue-700 rounded"><i class="fa fa-users mr-2"></i> Users</a>
+        <a href="#settings" class="flex items-center p-2 hover:bg-blue-700 rounded"><i class="fa fa-cog mr-2"></i> Settings</a>
+      </nav>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 p-6 overflow-y-auto">
+      <!-- Dashboard cards -->
+      <section id="dashboard" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white p-6 rounded-2xl shadow text-center">
+          <h2 class="text-gray-600">Total Trucks Today</h2>
+          <p id="totalTrucks" class="text-3xl font-bold">0</p>
+        </div>
+        <div class="bg-white p-6 rounded-2xl shadow text-center">
+          <h2 class="text-gray-600">Entries</h2>
+          <p id="entriesCount" class="text-3xl font-bold text-green-600">0</p>
+        </div>
+        <div class="bg-white p-6 rounded-2xl shadow text-center">
+          <h2 class="text-gray-600">Exits</h2>
+          <p id="exitsCount" class="text-3xl font-bold text-red-600">0</p>
+        </div>
+      </section>
+
+      <!-- Logs Table -->
+      <section id="logs" class="bg-white p-6 rounded-2xl shadow mb-6">
+        <h2 class="text-xl font-bold mb-4">Truck Logs</h2>
+        <table class="w-full text-left border">
+          <thead>
+            <tr class="bg-gray-200">
+              <th class="p-2">Truck No</th>
+              <th class="p-2">Contractor</th>
+              <th class="p-2">Type</th>
+              <th class="p-2">Time</th>
+              <th class="p-2">Gatekeeper</th>
+            </tr>
+          </thead>
+          <tbody id="logsTable"></tbody>
+        </table>
+        <div class="flex space-x-2 mt-4">
+          <button id="downloadCSV" class="bg-blue-600 text-white px-4 py-2 rounded">Download CSV</button>
+          <button id="downloadPDF" class="bg-red-600 text-white px-4 py-2 rounded">Download PDF</button>
+        </div>
+      </section>
+
+      <!-- Users Management -->
+      <section id="users" class="bg-white p-6 rounded-2xl shadow mb-6">
+        <h2 class="text-xl font-bold mb-4">Manage Gatekeepers</h2>
+        <div class="flex space-x-2 mb-4">
+          <input id="newUserEmail" type="email" placeholder="Email" class="border p-2 rounded w-1/2" />
+          <input id="newUserPass" type="password" placeholder="Password" class="border p-2 rounded w-1/2" />
+          <button id="addUserBtn" class="bg-green-600 text-white px-4 py-2 rounded">Add</button>
+        </div>
+        <ul id="usersList" class="list-disc pl-6"></ul>
+      </section>
+    </main>
+  </div>
+
+  <script type="module">
+    import { auth, db } from './firebaseConfig.js';
+    import { collection, getDocs, addDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.24.0/firebase-firestore.js';
+    import { createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/9.24.0/firebase-auth.js';
+
+    const logsTable = document.getElementById('logsTable');
+    const totalTrucks = document.getElementById('totalTrucks');
+    const entriesCount = document.getElementById('entriesCount');
+    const exitsCount = document.getElementById('exitsCount');
+
+    const logsRef = collection(db, 'truckLogs');
+
+    // Real-time logs listener
+    onSnapshot(logsRef, (snapshot) => {
+      logsTable.innerHTML = '';
+      let total = 0, entries = 0, exits = 0;
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        total++;
+        if (data.type === 'Entry') entries++; else exits++;
+
+        const row = `<tr class='border-t'>
+          <td class='p-2'>${data.truckNo}</td>
+          <td class='p-2'>${data.contractor}</td>
+          <td class='p-2'><span class='px-2 py-1 rounded text-white ${data.type === 'Entry' ? 'bg-green-600' : 'bg-red-600'}'>${data.type}</span></td>
+          <td class='p-2'>${new Date(data.timestamp.seconds*1000).toLocaleString()}</td>
+          <td class='p-2'>${data.gatekeeperID}</td>
+        </tr>`;
+        logsTable.insertAdjacentHTML('beforeend', row);
+      });
+      totalTrucks.textContent = total;
+      entriesCount.textContent = entries;
+      exitsCount.textContent = exits;
+    });
+
+    // CSV Download
+    document.getElementById('downloadCSV').addEventListener('click', async () => {
+      const snapshot = await getDocs(logsRef);
+      let csv = 'Truck No,Contractor,Type,Time,Gatekeeper\n';
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        csv += `${d.truckNo},${d.contractor},${d.type},${new Date(d.timestamp.seconds*1000).toLocaleString()},${d.gatekeeperID}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'truck_logs.csv';
+      a.click();
+    });
+
+    // PDF Download
+    document.getElementById('downloadPDF').addEventListener('click', async () => {
+      const snapshot = await getDocs(logsRef);
+      const docPDF = new jspdf.jsPDF();
+      docPDF.text('Truck Logs Report', 10, 10);
+      let y = 20;
+      snapshot.forEach(d => {
+        const data = d.data();
+        docPDF.text(`${data.truckNo} | ${data.contractor} | ${data.type} | ${new Date(data.timestamp.seconds*1000).toLocaleString()} | ${data.gatekeeperID}`, 10, y);
+        y += 10;
+      });
+      docPDF.save('truck_logs.pdf');
+    });
+
+    // Add Gatekeeper User
+    document.getElementById('addUserBtn').addEventListener('click', async () => {
+      const email = document.getElementById('newUserEmail').value;
+      const pass = document.getElementById('newUserPass').value;
+      try {
+        await createUserWithEmailAndPassword(auth, email, pass);
+        alert('User added!');
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  </script>
+</body>
+</html>
